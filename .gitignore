@@ -1,0 +1,7 @@
+vg-janus-android/bin/
+vg-janus-android/gen/
+*.class
+*.dex
+*.log
+*/gen/
+*/bin/
