@@ -13,9 +13,11 @@ import android.hardware.Camera.PictureCallback;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
 public class CameraActivity extends Activity {
@@ -143,13 +145,29 @@ public class CameraActivity extends Activity {
 	    	RelativeLayout preview = (RelativeLayout) findViewById(R.id.camera_layout);
 	        preview.setVisibility(View.GONE);
 	        
-	        ImageView image1 = (ImageView) findViewById(R.id.image_result_right);
-	        image1.setVisibility(View.VISIBLE);
-	        image1.setImageBitmap(bitmap1);
+	        LinearLayout result = (LinearLayout) findViewById(R.id.layout_result);
+	        result.setVisibility(View.VISIBLE);
 	        
-	        ImageView image2 = (ImageView) findViewById(R.id.image_result_left);
-	        image2.setVisibility(View.VISIBLE);
+	        final ImageView image1 = (ImageView) findViewById(R.id.image_result_right);
+	        image1.setImageBitmap(bitmap1);
+	        image1.setVisibility(View.GONE);
+	        
+	        final ImageView image2 = (ImageView) findViewById(R.id.image_result_left);
 	        image2.setImageBitmap(bitmap2);
+	        
+	        Button flip = (Button) findViewById(R.id.button_flip);
+	        flip.setOnClickListener(new OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					if (image1.getVisibility() == View.GONE) {
+						image2.setVisibility(View.GONE);
+						image1.setVisibility(View.VISIBLE);
+					} else {
+						image2.setVisibility(View.VISIBLE);
+						image1.setVisibility(View.GONE);
+					}
+				}
+	        });
 	    }
 	};
 
