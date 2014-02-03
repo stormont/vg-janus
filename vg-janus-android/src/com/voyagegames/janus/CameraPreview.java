@@ -2,67 +2,73 @@ package com.voyagegames.janus;
 
 import java.io.IOException;
 
-import android.app.Activity;
+import android.content.Context;
 import android.hardware.Camera;
-import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-import android.view.View;
-import android.widget.RelativeLayout;
 
-public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
+public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback, ILogger {
 	
 	private static final String TAG = "CameraPreview";
 	
-    private SurfaceHolder mHolder;
+	public Runnable onSurfaceChanged;
     private Camera mCamera;
-    private Activity mContext;
+	
+    private final SurfaceHolder mHolder;
 
-	public CameraPreview(Activity context, Camera camera) {
+	public CameraPreview(final Context context) {
+		super(context);
+        mHolder = getHolder();
+        mHolder.addCallback(this);
+	}
+
+	public CameraPreview(final Context context, final Camera camera) {
         super(context);
-        mContext = context;
         mCamera = camera;
-
-        // Install a SurfaceHolder.Callback so we get notified when the
-        // underlying surface is created and destroyed.
         mHolder = getHolder();
         mHolder.addCallback(this);
     }
+	
+	public void setCamera(final Camera camera) {
+		mCamera = camera;
+	}
 
-    public void surfaceCreated(SurfaceHolder holder) {
-        // The Surface has been created, now tell the camera where to draw the preview.
+    @Override
+    public void surfaceCreated(final SurfaceHolder holder) {
+    	if (mCamera == null) return;
+    	
         try {
             mCamera.setPreviewDisplay(holder);
             mCamera.startPreview();
         } catch (IOException e) {
-            Log.d(TAG, "Error setting camera preview: " + e.getMessage());
+            log(TAG, "Error setting camera preview in CameraPreview.surfaceCreated()", e);
         }
     }
 
-    public void surfaceDestroyed(SurfaceHolder holder) {
-        // empty. Take care of releasing the Camera preview in your activity.
+    @Override
+    public void surfaceDestroyed(final SurfaceHolder holder) {
+        // no-op. Take care of releasing the Camera preview in your activity.
     }
 
-    public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
-		RelativeLayout preview = (RelativeLayout) mContext.findViewById(R.id.camera_layout);
-        View guide = (View) mContext.findViewById(R.id.camera_guide);
-        RelativeLayout.LayoutParams relativeParams = new RelativeLayout.LayoutParams(3, preview.getHeight());
-        relativeParams.setMargins(preview.getWidth() / 2 - 1, 0, 0, 0);
-        guide.setLayoutParams(relativeParams);
+    @Override
+    public void surfaceChanged(final SurfaceHolder holder, final int format, final int w, final int h) {
+    	if (mCamera == null) return;
+    	
+    	if (onSurfaceChanged != null) onSurfaceChanged.run();
         
         // If your preview can change or rotate, take care of those events here.
         // Make sure to stop the preview before resizing or reformatting it.
 
-        if (mHolder.getSurface() == null){
-          // preview surface does not exist
-          return;
+        if (mHolder.getSurface() == null) {
+            log(TAG, "Preview surface does not exist in CameraPreview.surfaceChanged()");
+            return;
         }
 
         // stop preview before making changes
         try {
             mCamera.stopPreview();
-        } catch (Exception e){
-          // ignore: tried to stop a non-existent preview
+        } catch (final Exception e) {
+            // ignore: tried to stop a non-existent preview
         }
 
         // set preview size and make any resize, rotate or
@@ -73,9 +79,19 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         try {
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
-
-        } catch (Exception e){
-            Log.d(TAG, "Error starting camera preview: " + e.getMessage());
+        } catch (final Exception e){
+            log(TAG, "Error starting camera preview in CameraPreview.surfaceChanged()", e);
         }
     }
+
+	@Override
+	public void log(final String tag, final String msg) {
+		ApplicationLogger.log(tag, msg);
+	}
+
+	@Override
+	public void log(final String tag, final String msg, final Exception e) {
+		ApplicationLogger.log(tag, msg, e);
+	}
+	
 }

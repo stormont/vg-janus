@@ -1,17 +1,9 @@
 package com.voyagegames.janus;
 
 import android.app.Activity;
-import android.content.Context;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Bitmap.Config;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
 import android.hardware.Camera;
-import android.hardware.Camera.CameraInfo;
-import android.hardware.Camera.PictureCallback;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -20,155 +12,134 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
-public class CameraActivity extends Activity {
+public class CameraActivity extends Activity implements ILogger {
 	
 	private static final String TAG = "CameraActivity";
 
     private Camera mCamera;
     private CameraPreview mPreview;
+    private PictureCallbackHelper mPictureCallback;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
-
-        if (!checkCameraHardware(this)) return;
         
-        // Create an instance of Camera
-        mCamera = getCameraInstance();
-
-        // Create our Preview view and set it as the content of our activity.
-        mPreview = new CameraPreview(this, mCamera);
-        
-        FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
-        preview.addView(mPreview);
-        
-        // Add a listener to the Capture button
-        Button captureButton = (Button) findViewById(R.id.button_capture);
-        captureButton.setOnClickListener(
-            new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    // get an image from the camera
-                    mCamera.takePicture(null, null, mPicture);
-                }
-            }
-        );
+        try {
+        	setupCamera();
+        	setupPictureCallback();
+        	setupPreview();
+        } catch (final Exception e) {
+        	log(TAG, "Exception in CameraActivity.onCreate()", e);
+        }
     }
 
 	@Override
 	protected void onPause() {
 		super.onPause();
-		if (mCamera != null) {
-			mCamera.release();
-			mCamera = null;
+		
+		try {
+			CameraHelper.releaseCamera(mCamera);
+        } catch (final Exception e) {
+        	log(TAG, "Exception in CameraActivity.onPause()", e);
+        }
+	}
+	
+	private void setupCamera() {
+        if (!CameraHelper.deviceHasCamera(getPackageManager())) return;
+        mCamera = CameraHelper.getCameraInstance(CameraHelper.firstFrontFacingCameraId());
+	}
+	
+	private void onSurfaceChanged() {
+		final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
+		final View guide = (View)findViewById(R.id.camera_guide);
+		final RelativeLayout.LayoutParams relativeParams = new RelativeLayout.LayoutParams(3, preview.getHeight());
+        relativeParams.setMargins(preview.getWidth() / 2 - 1, 0, 0, 0);
+        guide.setLayoutParams(relativeParams);
+	}
+	
+	private void setupPictureCallback() {
+        mPictureCallback = new PictureCallbackHelper();
+        mPictureCallback.onComplete = new GenericRunnable<Bitmap>() {
+
+			@Override
+			public void run(final Bitmap input) {
+				pictureCallbackComplete(input);
+			}
+        	
+        };
+	}
+	
+	private void setupPreview() {
+		if (mCamera == null) return;
+		
+        mPreview = new CameraPreview(this, mCamera);
+        mPreview.onSurfaceChanged = new Runnable() {
+
+			@Override
+			public void run() {
+				onSurfaceChanged();
+			}
+        	
+        };
+        
+        final FrameLayout preview = (FrameLayout)findViewById(R.id.camera_preview);
+        preview.addView(mPreview);
+        
+        final Button captureButton = (Button)findViewById(R.id.button_capture);
+        captureButton.setOnClickListener(new TakePictureListener(mCamera, mPictureCallback));
+	}
+	
+	private void pictureCallbackComplete(final Bitmap bitmap) {
+		if (bitmap == null) {
+			log(TAG, "Bitmap result was null in CameraActivity.pictureCallbackComplete()");
+			return;
+		}
+		
+		final JanusBitmaps janusBitmaps = new JanusBitmaps(bitmap);
+    	
+    	final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
+        preview.setVisibility(View.GONE);
+        
+        final LinearLayout result = (LinearLayout)findViewById(R.id.layout_result);
+        result.setVisibility(View.VISIBLE);
+        
+        final ImageView imageLeft = (ImageView)findViewById(R.id.image_result_left);
+        imageLeft.setImageBitmap(janusBitmaps.bitmapLeft);
+        
+        final ImageView imageRight = (ImageView)findViewById(R.id.image_result_right);
+        imageRight.setImageBitmap(janusBitmaps.bitmapRight);
+        imageRight.setVisibility(View.GONE);
+        
+        final Button flip = (Button)findViewById(R.id.button_flip);
+        flip.setOnClickListener(new OnClickListener() {
+        	
+			@Override
+			public void onClick(final View view) {
+				flipJanusViews(imageLeft, imageRight);
+			}
+			
+        });
+	}
+
+	@Override
+	public void log(final String tag, final String msg) {
+		ApplicationLogger.log(tag, msg);
+	}
+
+	@Override
+	public void log(final String tag, final String msg, final Exception e) {
+		ApplicationLogger.log(tag, msg, e);
+	}
+	
+	private void flipJanusViews(final View imageLeft, final View imageRight) {
+		if (imageRight.getVisibility() == View.GONE) {
+			imageLeft.setVisibility(View.GONE);
+			imageRight.setVisibility(View.VISIBLE);
+		} else {
+			imageLeft.setVisibility(View.VISIBLE);
+			imageRight.setVisibility(View.GONE);
 		}
 	}
-
-	private boolean checkCameraHardware(Context context) {
-	    if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
-	        // this device has a camera
-	        return true;
-	    } else {
-	        // no camera on this device
-	        return false;
-	    }
-	}
-	
-	public static Camera getCameraInstance() {
-	    Camera c = null;
-	    try {
-	        c = Camera.open(findFrontFacingCamera()); // attempt to get a Camera instance
-	    }
-	    catch (Exception e) {
-	        // Camera is not available (in use or does not exist)
-	    }
-	    return c; // returns null if camera is unavailable
-	}
-	
-	private static int findFrontFacingCamera() {
-	    int cameraId = -1;
-	    // Search for the front facing camera
-	    int numberOfCameras = Camera.getNumberOfCameras();
-	    for (int i = 0; i < numberOfCameras; i++) {
-	      CameraInfo info = new CameraInfo();
-	      Camera.getCameraInfo(i, info);
-	      if (info.facing == CameraInfo.CAMERA_FACING_FRONT) {
-	        Log.d(TAG, "Camera found");
-	        cameraId = i;
-	        break;
-	      }
-	    }
-	    return cameraId;
-	  }
-	
-	private PictureCallback mPicture = new PictureCallback() {
-
-	    @Override
-	    public void onPictureTaken(byte[] data, Camera camera) {
-	    	Bitmap bitmap = BitmapFactory.decodeByteArray(data , 0, data.length);
-	    	
-	    	if (bitmap == null) {
-	    		Log.e(TAG, "Bitmap was null");
-	    		camera.startPreview();
-	    		return;
-	    	}
-
-	    	Matrix matrix = new Matrix();
-	    	matrix.postRotate(-90);
-	    	bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-	    	
-	    	int[] pixels = new int[bitmap.getHeight()*bitmap.getWidth()];
-	    	int[] pixels1 = new int[pixels.length];
-	    	int[] pixels2 = new int[pixels.length];
-	    	bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
-	    	int w = bitmap.getWidth();
-	    	for (int i=0; i<bitmap.getHeight(); i++) {
-	    	    for (int j = 0; j < w / 2; j++) {
-	    	    	pixels1[(i * w) + j] = pixels[(i * w) + j];
-	    	    }
-	    	    for (int j = w / 2; j < w; j++) {
-	    	    	pixels1[(i * w) + j] = pixels[(i * w) + (w - j - 1)];
-	    	    }
-	    	}
-	    	for (int i=0; i<bitmap.getHeight(); i++) {
-	    	    for (int j = 0; j < w / 2; j++) {
-	    	    	pixels2[(i * w) + j] = pixels[(i * w) + (w - j - 1)];
-	    	    }
-	    	    for (int j = w / 2; j < w; j++) {
-	    	    	pixels2[(i * w) + j] = pixels[(i * w) + j];
-	    	    }
-	    	}
-	    	Bitmap bitmap1 = Bitmap.createBitmap(pixels1, bitmap.getWidth(), bitmap.getHeight(), Config.ARGB_8888);
-	    	Bitmap bitmap2 = Bitmap.createBitmap(pixels2, bitmap.getWidth(), bitmap.getHeight(), Config.ARGB_8888);
-	    	
-	    	RelativeLayout preview = (RelativeLayout) findViewById(R.id.camera_layout);
-	        preview.setVisibility(View.GONE);
-	        
-	        LinearLayout result = (LinearLayout) findViewById(R.id.layout_result);
-	        result.setVisibility(View.VISIBLE);
-	        
-	        final ImageView image1 = (ImageView) findViewById(R.id.image_result_right);
-	        image1.setImageBitmap(bitmap1);
-	        image1.setVisibility(View.GONE);
-	        
-	        final ImageView image2 = (ImageView) findViewById(R.id.image_result_left);
-	        image2.setImageBitmap(bitmap2);
-	        
-	        Button flip = (Button) findViewById(R.id.button_flip);
-	        flip.setOnClickListener(new OnClickListener() {
-				@Override
-				public void onClick(View view) {
-					if (image1.getVisibility() == View.GONE) {
-						image2.setVisibility(View.GONE);
-						image1.setVisibility(View.VISIBLE);
-					} else {
-						image2.setVisibility(View.VISIBLE);
-						image1.setVisibility(View.GONE);
-					}
-				}
-	        });
-	    }
-	};
 
 }
