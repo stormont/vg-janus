@@ -34,6 +34,12 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_gravity="center" />
+	<Button
+		android:id="@+id/button_switch"
+		android:text="Switch"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:layout_gravity="center" />
 <LinearLayout 
     android:id="@+id/layout_result"
     android:orientation="vertical"
@@ -47,15 +53,10 @@
     android:layout_height="wrap_content"
     android:layout_gravity="center" />
   <ImageView
-      android:id="@+id/image_result_right"
+      android:id="@+id/image_result"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
-      android:contentDescription="image_right" />
-  <ImageView
-      android:id="@+id/image_result_left"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:contentDescription="image_left" />
+      android:contentDescription="image_result" />
 </LinearLayout>
   </LinearLayout>
     </ScrollView>

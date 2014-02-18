@@ -32,6 +32,16 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 	public void setCamera(final Camera camera) {
 		mCamera = camera;
 	}
+	
+	public void stopPreview() {
+		if (mCamera == null) return;
+		
+		try {
+            mCamera.stopPreview();
+        } catch (final Exception e) {
+            // ignore: tried to stop a non-existent preview
+        }
+	}
 
     @Override
     public void surfaceCreated(final SurfaceHolder holder) {
@@ -65,11 +75,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         }
 
         // stop preview before making changes
-        try {
-            mCamera.stopPreview();
-        } catch (final Exception e) {
-            // ignore: tried to stop a non-existent preview
-        }
+        stopPreview();
 
         // set preview size and make any resize, rotate or
         // reformatting changes here

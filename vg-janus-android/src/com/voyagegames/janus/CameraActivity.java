@@ -3,6 +3,7 @@ package com.voyagegames.janus;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.hardware.Camera;
+import android.hardware.Camera.Face;
 import android.os.Bundle;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -19,19 +20,24 @@ public class CameraActivity extends Activity implements ILogger {
     private Camera mCamera;
     private CameraPreview mPreview;
     private PictureCallbackHelper mPictureCallback;
+	private boolean mFrontCamera = true;
+	private boolean mLeftImage = true;
+	
+	private OnClickListener resetCaptureListener = new OnClickListener() {
+
+		@Override
+		public void onClick(final View view) {
+			prepareView(false);
+			initCamera();
+		}
+
+	};
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
-        
-        try {
-        	setupCamera();
-        	setupPictureCallback();
-        	setupPreview();
-        } catch (final Exception e) {
-        	log(TAG, "Exception in CameraActivity.onCreate()", e);
-        }
+        initCamera();
     }
 
 	@Override
@@ -45,14 +51,41 @@ public class CameraActivity extends Activity implements ILogger {
         }
 	}
 	
+	@Override
+	public void log(final String tag, final String msg) {
+		ApplicationLogger.log(tag, msg);
+	}
+	
+	@Override
+	public void log(final String tag, final String msg, final Exception e) {
+		ApplicationLogger.log(tag, msg, e);
+	}
+	
+	private void initCamera() {
+		try {
+        	setupCamera();
+        	setupPictureCallback();
+        	setupPreview();
+        } catch (final Exception e) {
+        	log(TAG, "Exception in CameraActivity.initCamera()", e);
+        }
+	}
+	
 	private void setupCamera() {
         if (!CameraHelper.deviceHasCamera(getPackageManager())) return;
-        mCamera = CameraHelper.getCameraInstance(CameraHelper.firstFrontFacingCameraId());
+		if (mCamera != null) mCamera.release();
+        if (mFrontCamera) mCamera = CameraHelper.getCameraInstance(CameraHelper.firstFrontFacingCameraId());
+		else mCamera = CameraHelper.getCameraInstance(CameraHelper.firstBackFacingCameraId());
+		
+		Camera.Parameters params = mCamera.getParameters();
+		if (params.getMaxNumDetectedFaces() < 1) return;
+		mCamera.setFaceDetectionListener(new MyFaceDetectionListener());
+		mCamera.startFaceDetection();
 	}
 	
 	private void onSurfaceChanged() {
 		final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
-		final View guide = (View)findViewById(R.id.camera_guide);
+		final View guide = findViewById(R.id.camera_guide);
 		final RelativeLayout.LayoutParams relativeParams = new RelativeLayout.LayoutParams(3, preview.getHeight());
         relativeParams.setMargins(preview.getWidth() / 2 - 1, 0, 0, 0);
         guide.setLayoutParams(relativeParams);
@@ -84,10 +117,23 @@ public class CameraActivity extends Activity implements ILogger {
         };
         
         final FrameLayout preview = (FrameLayout)findViewById(R.id.camera_preview);
+		preview.removeAllViews();
         preview.addView(mPreview);
         
         final Button captureButton = (Button)findViewById(R.id.button_capture);
         captureButton.setOnClickListener(new TakePictureListener(mCamera, mPictureCallback));
+		
+		final Button switchButton = (Button)findViewById(R.id.button_switch);
+		switchButton.setVisibility(View.VISIBLE);
+		switchButton.setOnClickListener(new OnClickListener() {
+			
+			@Override
+			public void onClick(final View view) {
+				mFrontCamera = !mFrontCamera;
+				initCamera();
+			}
+			
+		});
 	}
 	
 	private void pictureCallbackComplete(final Bitmap bitmap) {
@@ -97,48 +143,49 @@ public class CameraActivity extends Activity implements ILogger {
 		}
 		
 		final JanusBitmaps janusBitmaps = new JanusBitmaps(bitmap);
-    	
-    	final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
-        preview.setVisibility(View.GONE);
+		prepareView(true);
         
-        final LinearLayout result = (LinearLayout)findViewById(R.id.layout_result);
-        result.setVisibility(View.VISIBLE);
-        
-        final ImageView imageLeft = (ImageView)findViewById(R.id.image_result_left);
-        imageLeft.setImageBitmap(janusBitmaps.bitmapLeft);
-        
-        final ImageView imageRight = (ImageView)findViewById(R.id.image_result_right);
-        imageRight.setImageBitmap(janusBitmaps.bitmapRight);
-        imageRight.setVisibility(View.GONE);
+        final ImageView imageResult = (ImageView)findViewById(R.id.image_result);
+        imageResult.setImageBitmap(janusBitmaps.bitmapLeft);
+		
+		final Button captureButton = (Button)findViewById(R.id.button_capture);
+		captureButton.setOnClickListener(resetCaptureListener);
         
         final Button flip = (Button)findViewById(R.id.button_flip);
         flip.setOnClickListener(new OnClickListener() {
         	
 			@Override
 			public void onClick(final View view) {
-				flipJanusViews(imageLeft, imageRight);
+				if (mLeftImage) imageResult.setImageBitmap(janusBitmaps.bitmapRight);
+				else imageResult.setImageBitmap(janusBitmaps.bitmapLeft);
+				mLeftImage = !mLeftImage;
 			}
 			
         });
 	}
-
-	@Override
-	public void log(final String tag, final String msg) {
-		ApplicationLogger.log(tag, msg);
-	}
-
-	@Override
-	public void log(final String tag, final String msg, final Exception e) {
-		ApplicationLogger.log(tag, msg, e);
+	
+	private void prepareView(final boolean showResult) {
+		final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
+		final Button switchButton = (Button)findViewById(R.id.button_switch);
+		final LinearLayout result = (LinearLayout)findViewById(R.id.layout_result);
+		
+		if (showResult) {
+			mPreview.stopPreview();
+			preview.setVisibility(View.GONE);
+			switchButton.setVisibility(View.GONE);
+			result.setVisibility(View.VISIBLE);
+		} else {
+			preview.setVisibility(View.VISIBLE);
+			switchButton.setVisibility(View.VISIBLE);
+			result.setVisibility(View.GONE);
+		}
 	}
 	
-	private void flipJanusViews(final View imageLeft, final View imageRight) {
-		if (imageRight.getVisibility() == View.GONE) {
-			imageLeft.setVisibility(View.GONE);
-			imageRight.setVisibility(View.VISIBLE);
-		} else {
-			imageLeft.setVisibility(View.VISIBLE);
-			imageRight.setVisibility(View.GONE);
+	class MyFaceDetectionListener implements Camera.FaceDetectionListener {
+
+		@Override
+		public void onFaceDetection(Face[] faces, Camera camera) {
+			if (faces.length < 1) return;
 		}
 	}
 
