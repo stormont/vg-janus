@@ -1,24 +1,27 @@
-package com.voyagegames.janus;
+package com.voyagegames.janus.bitmaptransformers;
 
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 
-public class JanusBitmaps {
+import com.voyagegames.janus.ITransformer;
+
+public class JanusBitmapTransformer implements ITransformer<Bitmap, Bitmap[]> {
 	
-	public final Bitmap bitmapLeft;
-	public final Bitmap bitmapRight;
-	
-	public JanusBitmaps(final Bitmap bitmap) {
+	@Override
+	public Bitmap[] transform(final Bitmap bitmap) {
+		final Bitmap[] bitmaps = new Bitmap[2];
+
 		if (bitmap == null) {
-			bitmapLeft = null;
-			bitmapRight = null;
-			return;
+			bitmaps[0] = null;
+			bitmaps[1] = null;
+			return bitmaps;
 		}
 		
     	final int[] pixels = new int[bitmap.getHeight() * bitmap.getWidth()];
     	final int w = bitmap.getWidth();
     	final int halfW = w / 2;
     	
+    	// Get the 'left face' bitmap
     	bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
     	
     	for (int i = 0; i < bitmap.getHeight(); i++) {
@@ -31,7 +34,9 @@ public class JanusBitmaps {
     	    }
     	}
 		
-		bitmapLeft = Bitmap.createBitmap(pixels, bitmap.getWidth(), bitmap.getHeight(), Config.ARGB_8888);
+    	bitmaps[0] = Bitmap.createBitmap(pixels, bitmap.getWidth(), bitmap.getHeight(), Config.ARGB_8888);
+    	
+    	// Get the 'right face' bitmap
 		bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
     	
     	for (int i = 0; i < bitmap.getHeight(); i++) {
@@ -44,7 +49,8 @@ public class JanusBitmaps {
     	    }
     	}
     	
-    	bitmapRight = Bitmap.createBitmap(pixels, bitmap.getWidth(), bitmap.getHeight(), Config.ARGB_8888);
+    	bitmaps[1] = Bitmap.createBitmap(pixels, bitmap.getWidth(), bitmap.getHeight(), Config.ARGB_8888);
+    	return bitmaps;
 	}
 
 }

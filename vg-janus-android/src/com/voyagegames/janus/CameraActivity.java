@@ -3,8 +3,8 @@ package com.voyagegames.janus;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.hardware.Camera;
-import android.hardware.Camera.Face;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -13,6 +13,12 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
+import com.voyagegames.janus.bitmaptransformers.AlphaBlendBitmapTransformer;
+import com.voyagegames.janus.bitmaptransformers.DualBitmapTransformer;
+import com.voyagegames.janus.bitmaptransformers.FaceDetectBitmapTransformer;
+import com.voyagegames.janus.bitmaptransformers.JanusBitmapTransformer;
+import com.voyagegames.janus.bitmaptransformers.MonkeyBitmapTransformer;
+
 public class CameraActivity extends Activity implements ILogger {
 	
 	private static final String TAG = "CameraActivity";
@@ -20,8 +26,7 @@ public class CameraActivity extends Activity implements ILogger {
     private Camera mCamera;
     private CameraPreview mPreview;
     private PictureCallbackHelper mPictureCallback;
-	private boolean mFrontCamera = true;
-	private boolean mLeftImage = true;
+	private int mCurImageIndex = 0;
 	
 	private OnClickListener resetCaptureListener = new OnClickListener() {
 
@@ -74,17 +79,12 @@ public class CameraActivity extends Activity implements ILogger {
 	private void setupCamera() {
         if (!CameraHelper.deviceHasCamera(getPackageManager())) return;
 		if (mCamera != null) mCamera.release();
-        if (mFrontCamera) mCamera = CameraHelper.getCameraInstance(CameraHelper.firstFrontFacingCameraId());
-		else mCamera = CameraHelper.getCameraInstance(CameraHelper.firstBackFacingCameraId());
-		
-		Camera.Parameters params = mCamera.getParameters();
-		if (params.getMaxNumDetectedFaces() < 1) return;
-		mCamera.setFaceDetectionListener(new MyFaceDetectionListener());
-		mCamera.startFaceDetection();
+        mCamera = CameraHelper.getCameraInstance(CameraHelper.firstFrontFacingCameraId());
 	}
 	
 	private void onSurfaceChanged() {
 		final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
+		
 		final View guide = findViewById(R.id.camera_guide);
 		final RelativeLayout.LayoutParams relativeParams = new RelativeLayout.LayoutParams(3, preview.getHeight());
         relativeParams.setMargins(preview.getWidth() / 2 - 1, 0, 0, 0);
@@ -97,7 +97,18 @@ public class CameraActivity extends Activity implements ILogger {
 
 			@Override
 			public void run(final Bitmap input) {
-				pictureCallbackComplete(input);
+				final ITransformer<Bitmap, Bitmap> faceTransform = new FaceDetectBitmapTransformer();
+				final Bitmap face = faceTransform.transform(input);
+				
+				/*
+				final ITransformer<Bitmap, Bitmap> monkeyTransform = new MonkeyBitmapTransformer(CameraActivity.this);
+				final Bitmap monkey = monkeyTransform.transform(face);
+
+				final ITransformer<Bitmap[], Bitmap> blendTransform = new AlphaBlendBitmapTransformer();
+				final Bitmap blend = blendTransform.transform(new Bitmap[] { face, monkey });
+				*/
+				
+				pictureCallbackComplete(face);
 			}
         	
         };
@@ -122,31 +133,24 @@ public class CameraActivity extends Activity implements ILogger {
         
         final Button captureButton = (Button)findViewById(R.id.button_capture);
         captureButton.setOnClickListener(new TakePictureListener(mCamera, mPictureCallback));
-		
-		final Button switchButton = (Button)findViewById(R.id.button_switch);
-		switchButton.setVisibility(View.VISIBLE);
-		switchButton.setOnClickListener(new OnClickListener() {
-			
-			@Override
-			public void onClick(final View view) {
-				mFrontCamera = !mFrontCamera;
-				initCamera();
-			}
-			
-		});
 	}
 	
-	private void pictureCallbackComplete(final Bitmap bitmap) {
-		if (bitmap == null) {
+	private boolean mShowMonkey = false;
+	private boolean mShowJanus = false;
+	private Bitmap[] mBitmaps;
+	
+	private void pictureCallbackComplete(final Bitmap origBitmap) {
+		if (origBitmap == null) {
 			log(TAG, "Bitmap result was null in CameraActivity.pictureCallbackComplete()");
 			return;
 		}
 		
-		final JanusBitmaps janusBitmaps = new JanusBitmaps(bitmap);
+		final ITransformer<Bitmap, Bitmap[]> dualTransform = new DualBitmapTransformer();
+		mBitmaps = dualTransform.transform(origBitmap);
 		prepareView(true);
         
         final ImageView imageResult = (ImageView)findViewById(R.id.image_result);
-        imageResult.setImageBitmap(janusBitmaps.bitmapLeft);
+        imageResult.setImageBitmap(mBitmaps[0]);
 		
 		final Button captureButton = (Button)findViewById(R.id.button_capture);
 		captureButton.setOnClickListener(resetCaptureListener);
@@ -156,36 +160,88 @@ public class CameraActivity extends Activity implements ILogger {
         	
 			@Override
 			public void onClick(final View view) {
-				if (mLeftImage) imageResult.setImageBitmap(janusBitmaps.bitmapRight);
-				else imageResult.setImageBitmap(janusBitmaps.bitmapLeft);
-				mLeftImage = !mLeftImage;
+				mCurImageIndex = (mCurImageIndex + 1) % mBitmaps.length;
+				imageResult.setImageBitmap(mBitmaps[mCurImageIndex]);
 			}
 			
         });
+        
+        final Button monkey = (Button)findViewById(R.id.button_monkey);
+        monkey.setOnClickListener(new OnClickListener() {
+        	
+			@Override
+			public void onClick(final View view) {
+				mShowMonkey = !mShowMonkey;
+				if (!mShowMonkey) monkey.setText("Monkey");
+				else monkey.setText("No Monkey");
+				process(origBitmap, imageResult);
+			}
+        	
+        });
+        
+        final Button janus = (Button)findViewById(R.id.button_janus);
+        janus.setOnClickListener(new OnClickListener() {
+        	
+			@Override
+			public void onClick(final View view) {
+				mShowJanus = !mShowJanus;
+				if (!mShowJanus) janus.setText("Janus");
+				else janus.setText("No Janus");
+				process(origBitmap, imageResult);
+			}
+        	
+        });
+        
+        final Button save = (Button)findViewById(R.id.button_save);
+        save.setOnClickListener(new OnClickListener() {
+        	
+			@Override
+			public void onClick(final View view) {
+				saveImage();
+			}
+        	
+        });
+	}
+	
+	private void process(final Bitmap origBitmap, final ImageView imageResult) {
+		final ITransformer<Bitmap, Bitmap[]> janus = mShowJanus ? new JanusBitmapTransformer() : new DualBitmapTransformer();
+		
+		if (!mShowMonkey) {
+			mBitmaps = janus.transform(origBitmap);
+			imageResult.setImageBitmap(mBitmaps[mCurImageIndex]);
+			return;
+		}
+		
+		final ITransformer<Bitmap, Bitmap> monkeyTransform = new MonkeyBitmapTransformer(CameraActivity.this);
+		final Bitmap monkeyBitmap = monkeyTransform.transform(origBitmap);
+
+		final ITransformer<Bitmap[], Bitmap> blendTransform = new AlphaBlendBitmapTransformer();
+		final Bitmap blend = blendTransform.transform(new Bitmap[] { origBitmap, monkeyBitmap });
+		
+		mBitmaps = janus.transform(blend);
+		imageResult.setImageBitmap(mBitmaps[mCurImageIndex]);
+	}
+	
+	private void saveImage() {
+		final long time = System.currentTimeMillis();
+		MediaStore.Images.Media.insertImage(
+			getContentResolver(),
+			mBitmaps[mCurImageIndex],
+		    "JANUS_" + time + ".jpg",
+		    "JANUS_" + time + ".jpg");
 	}
 	
 	private void prepareView(final boolean showResult) {
 		final RelativeLayout preview = (RelativeLayout)findViewById(R.id.camera_layout);
-		final Button switchButton = (Button)findViewById(R.id.button_switch);
 		final LinearLayout result = (LinearLayout)findViewById(R.id.layout_result);
 		
 		if (showResult) {
 			mPreview.stopPreview();
 			preview.setVisibility(View.GONE);
-			switchButton.setVisibility(View.GONE);
 			result.setVisibility(View.VISIBLE);
 		} else {
 			preview.setVisibility(View.VISIBLE);
-			switchButton.setVisibility(View.VISIBLE);
 			result.setVisibility(View.GONE);
-		}
-	}
-	
-	class MyFaceDetectionListener implements Camera.FaceDetectionListener {
-
-		@Override
-		public void onFaceDetection(Face[] faces, Camera camera) {
-			if (faces.length < 1) return;
 		}
 	}
 

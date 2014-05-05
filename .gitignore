@@ -1,5 +1,6 @@
 vg-janus-android/bin/
 vg-janus-android/gen/
+PoissonImageEditing/
 *.class
 *.dex
 *.log
